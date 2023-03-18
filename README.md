@@ -15,3 +15,5 @@ BestBackground
 Ниже указаны ссылки на последовательные этапы решения задачи.
 
 1. [Оценка проекта до взятия в работу](Before_work/Before_work.md).
+
+2. [Схема решения и метрики](Roadmap_and_metrics/Roadmap_and_metrics.md)
