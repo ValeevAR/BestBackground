@@ -17,3 +17,7 @@ BestBackground
 1. [Оценка проекта до взятия в работу](Before_work/Before_work.md).
 
 2. [Схема решения и метрики](Roadmap_and_metrics/Roadmap_and_metrics.md)
+
+3. [Сбор данных для решения задачи](Data_preprocessing/Get_data.md)
+
+4. [Модель и её оценка](Model_and_evaluation/Model_and_evaluation.md)
