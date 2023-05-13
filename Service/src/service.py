@@ -378,7 +378,8 @@ def init_models(model_detection_name='model_jew_detect_01.05.2023.md', model_mas
 
 
 if __name__ == '__main__':
-    images = 'test.jpg'
+    test_img_folder = os.path.abspath(os.path.dirname(__file__))
+    images = os.path.join(test_img_folder, 'test.jpg')
 
     '''
     Инициализация, то есть подгрузка моделей проходит через функцию init_models
