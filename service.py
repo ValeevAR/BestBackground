@@ -215,8 +215,8 @@ def get_jewellery_image_(images_original, model_detection, model_mask,
     for k in range(rows):
         mask = predict[k]['mask']
 
-        q = copy.copy(images_original[k])
-        q.putalpha(mask.resize(images_original[k].size))
+        q = copy.copy(predict[k]['cropped_image'])
+        q.putalpha(mask.resize(predict[k]['cropped_image'].size))
         q_clean = clean_image_with_mask(q, r=threshold_clean_mask)
         predict[k]['image_segmented'] = q_clean
 
@@ -352,7 +352,7 @@ def init_models(model_detection_name='model_jew_detect_01.05.2023.md', model_mas
         print('downloading model segmentation model')
 
         base_url = 'https://cloud-api.yandex.net/v1/disk/public/resources/download?'
-        public_key = 'https://disk.yandex.ru/d/8iJHpC-5WY_kRw'  # Сюда вписываете вашу ссылку
+        public_key = 'https://disk.yandex.ru/d/hMja6N8LUz4R3w'  # Сюда вписываете вашу ссылку
 
         # Получаем загрузочную ссылку
         final_url = base_url + urlencode(dict(public_key=public_key))
