@@ -1,5 +1,7 @@
 import os
+import io
 import numpy as np
+import requests
 import torch
 import torchvision
 import torchvision.transforms.functional as TF
@@ -7,7 +9,7 @@ from torchvision import transforms
 import copy
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from PIL import Image, ImageFilter
-
+from urllib.parse import urlencode
 
 def PIL_image_to_tensor(image, model_shape):
     test_transform = torch.nn.Sequential(
@@ -235,9 +237,6 @@ def get_jewellery_image_(images_original, model_detection, model_mask,
     return predict
 
 
-import io
-
-
 def get_jewellery_image(images_original, model_detection, model_mask,
                         model_shape=(384, 384),
                         k=0.05,
@@ -290,9 +289,6 @@ def get_jewellery_image(images_original, model_detection, model_mask,
     return predict
 
 
-import requests
-
-
 def download_file_from_google_drive(id, destination):
     URL = "https://docs.google.com/uc?export=download"
 
@@ -325,19 +321,16 @@ def save_response_content(response, destination):
                 f.write(chunk)
 
 
-import requests
-from urllib.parse import urlencode
-
-
 def init_models(model_detection_name='model_jew_detect_01.05.2023.md', model_mask_name='model_jew_mask_02.05.2023.md'):
     global DEVICE
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    models_folder = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'models')
 
-    if not os.path.exists('models'):
+    if not os.path.exists(models_folder):
         print('creating folder /models')
-        os.makedirs('models')
+        os.makedirs(models_folder)
 
-    if not os.path.isfile(os.path.join('models', model_detection_name)):
+    if not os.path.isfile(os.path.join(models_folder, model_detection_name)):
         print('downloading model detection model')
 
         base_url = 'https://cloud-api.yandex.net/v1/disk/public/resources/download?'
@@ -351,12 +344,12 @@ def init_models(model_detection_name='model_jew_detect_01.05.2023.md', model_mas
         # Загружаем файл и сохраняем его
         download_response = requests.get(download_url)
 
-        destination = os.path.join('models', model_detection_name)
+        destination = os.path.join(models_folder, model_detection_name)
 
         with open(destination, 'wb') as f:  # Здесь укажите нужный путь к файлу
             f.write(download_response.content)
 
-    if not os.path.isfile(os.path.join('models', model_mask_name)):
+    if not os.path.isfile(os.path.join(models_folder, model_mask_name)):
         print('downloading model segmentation model')
 
         base_url = 'https://cloud-api.yandex.net/v1/disk/public/resources/download?'
@@ -370,13 +363,13 @@ def init_models(model_detection_name='model_jew_detect_01.05.2023.md', model_mas
         # Загружаем файл и сохраняем его
         download_response = requests.get(download_url)
 
-        destination = os.path.join('models', model_mask_name)
+        destination = os.path.join(models_folder, model_mask_name)
 
         with open(destination, 'wb') as f:  # Здесь укажите нужный путь к файлу
             f.write(download_response.content)
 
-    model_detection = load_model_detection(os.path.join('models', model_detection_name))
-    model_mask = load_model_mask(os.path.join('models', model_mask_name))
+    model_detection = load_model_detection(os.path.join(models_folder, model_detection_name))
+    model_mask = load_model_mask(os.path.join(models_folder, model_mask_name))
 
     model_detection.eval()
     model_mask.eval()
@@ -385,7 +378,8 @@ def init_models(model_detection_name='model_jew_detect_01.05.2023.md', model_mas
 
 
 if __name__ == '__main__':
-    images = 'test.jpg'
+    test_img_folder = os.path.abspath(os.path.dirname(__file__))
+    images = os.path.join(test_img_folder, 'test.jpg')
 
     '''
     Инициализация, то есть подгрузка моделей проходит через функцию init_models

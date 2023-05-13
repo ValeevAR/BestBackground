@@ -21,3 +21,5 @@ BestBackground
 3. [Сбор данных для решения задачи](Data_preprocessing/Get_data.md)
 
 4. [Модель и её оценка](Model_and_evaluation/Model_and_evaluation.md)
+
+5. [Реализация сервиса с моделью](Service/Service.md)
