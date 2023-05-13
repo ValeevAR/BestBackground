@@ -1,15 +1,22 @@
+# import segmentation_models_pytorch
 import os
-import io
-import copy
-import torch
-import requests
+
 import numpy as np
+import torch
 import torchvision
+
 import torchvision.transforms.functional as TF
 from torchvision import transforms
+import copy
+
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from PIL import Image, ImageFilter
-from urllib.parse import urlencode
+# from torchvision.models.detection import FasterRCNN
+# from torchvision.models.detection.rpn import AnchorGenerator
+# import time
+# import math
+
+from PIL import Image
+import gdown
 
 
 def PIL_image_to_tensor(image, model_shape):
@@ -143,35 +150,30 @@ def jewellery_mask(images, model, model_shape=(384, 384), k=0):
 
     result = []
 
-    try:
-        for i, prediction in enumerate(predictions):
-            # pred_box = prediction['boxes'][0].tolist()
-            pred_score = prediction['scores'][0].item()
-            pred_mask = transform(prediction['masks'][0])
-            result.append((pred_mask, pred_score))
-    except:
-        pred_score = None
-        pred_mask = None
-        result.append((pred_mask, pred_score))
+    for i, prediction in enumerate(predictions):
+        pred_box = prediction['boxes'][0].tolist()
+        pred_score = prediction['scores'][0].item()
+        pred_mask = transform(prediction['masks'][0])
 
+        result.append((pred_mask, pred_score))
     return result
 
 
-def clean_image_with_mask(image, r=0.6, min_blur=0.1):
+def clean_image_with_mask(image, r=0.6):
     if r == None:
         return image
 
     image = np.array(image)
 
     x = image[:, :, 3] / 255.0 + (r - 0.5)
-    x = np.clip(x, min_blur, 1)
-    image[:, :, 3] = x * 255
+    x = np.clip(x, 0, 1)
+    image[:, :, 3] = x.round() * 255
 
     return Image.fromarray(image)
 
 
-def jewellery_detect_crop_mask(images, model_detection, model_mask, model_shape=(384, 384), k=0.02):
-    rboxes = jewellery_detection_get_rx_ry(images, model_detection, model_shape=model_shape, k=k)
+def jewellery_detect_crop_mask(images, model_detection, model_mask, model_shape=(384, 384), k=0):
+    rboxes = jewellery_detection_get_rx_ry(images, model_detection, model_shape=model_shape, k=0.02)
 
     cropped_images = []
     detect_acc = []
@@ -205,37 +207,31 @@ def get_jewellery_image_(images_original, model_detection, model_mask,
                          threshold_segmentation=0.99,
                          threshold_clean_mask=0.9,
                          show_bad_results=True,
-                         min_blur=0.1,
-                         gaussian_blur=20,
                          ):
     predict = jewellery_detect_crop_mask(images_original, model_detection, model_mask, model_shape=model_shape, k=k)
 
     rows = len(images_original)
 
     for k in range(rows):
-        if predict[k]['mask'] is not None:
+        mask = predict[k]['mask']
 
-            mask = predict[k]['mask']
+        q = copy.copy(images_original[k])
+        q.putalpha(mask.resize(images_original[k].size))
+        q_clean = clean_image_with_mask(q, r=threshold_clean_mask)
+        predict[k]['image_segmented'] = q_clean
 
-            q = copy.copy(predict[k]['cropped_image'])
-            q.putalpha(mask.resize(predict[k]['cropped_image'].size))
-            q_clean = clean_image_with_mask(q, r=threshold_clean_mask, min_blur=min_blur)
+        if predict[k]['detection_accurancy'] < threshold_detect and not show_bad_results:
+            predict[k]['cropped_image'] = None
 
-            rgb = q_clean.convert('RGB')
-            blurred = rgb.filter(ImageFilter.GaussianBlur(gaussian_blur))
-            q_clean = Image.composite(rgb, blurred, mask.resize(predict[k]['cropped_image'].size))
+        if predict[k]['segmentation_accurancy'] < threshold_segmentation and not show_bad_results:
+            predict[k]['image_segmented'] = None
 
-            predict[k]['image_segmented'] = q_clean
-
-            if predict[k]['detection_accurancy'] < threshold_detect and not show_bad_results:
-                predict[k]['cropped_image'] = None
-
-            if predict[k]['segmentation_accurancy'] < threshold_segmentation and not show_bad_results:
-                predict[k]['image_segmented'] = None
-
-            predict[k]['image_original'] = images_original[k]
+        predict[k]['image_original'] = images_original[k]
 
     return predict
+
+
+import io
 
 
 def get_jewellery_image(images_original, model_detection, model_mask,
@@ -245,20 +241,16 @@ def get_jewellery_image(images_original, model_detection, model_mask,
                         threshold_segmentation=0.99,
                         threshold_clean_mask=0.9,
                         show_bad_results=True,
-                        path=None,
-                        min_blur=0.1,
-                        gaussian_blur=20,
+                        path=None
                         ):
     if not isinstance(images_original, list):
         images_original = [images_original]
 
     if isinstance(images_original[0], str):
         try:
-            print(images_original)
             images_original = [Image.open(i) for i in images_original]
         except:
-            raise RuntimeError('Loading file error')
-            # print('Loading file error')
+            print('Loading file error')
 
     if not isinstance(images_original[0], Image.Image):
         try:
@@ -273,8 +265,6 @@ def get_jewellery_image(images_original, model_detection, model_mask,
                                    threshold_segmentation=threshold_segmentation,
                                    threshold_clean_mask=threshold_clean_mask,
                                    show_bad_results=show_bad_results,
-                                   min_blur=min_blur,
-                                   gaussian_blur=gaussian_blur
                                    )
 
     if path is not None:
@@ -290,6 +280,9 @@ def get_jewellery_image(images_original, model_detection, model_mask,
                 print('Saving files error')
 
     return predict
+
+
+import requests
 
 
 def download_file_from_google_drive(id, destination):
@@ -324,15 +317,19 @@ def save_response_content(response, destination):
                 f.write(chunk)
 
 
+import requests
+from urllib.parse import urlencode
+
+
 def init_models(model_detection_name='model_jew_detect_01.05.2023.md', model_mask_name='model_jew_mask_02.05.2023.md'):
     global DEVICE
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-    models_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models')
-    if not os.path.exists(models_path):
-        print('creating folder /models')
-        os.makedirs(models_path)
 
-    if not os.path.isfile(os.path.join(models_path, model_detection_name)):
+    if not os.path.exists('models'):
+        print('creating folder /models')
+        os.makedirs('models')
+
+    if not os.path.isfile(os.path.join('models', model_detection_name)):
         print('downloading model detection model')
 
         base_url = 'https://cloud-api.yandex.net/v1/disk/public/resources/download?'
@@ -346,16 +343,16 @@ def init_models(model_detection_name='model_jew_detect_01.05.2023.md', model_mas
         # Загружаем файл и сохраняем его
         download_response = requests.get(download_url)
 
-        destination = os.path.join(models_path, model_detection_name)
+        destination = os.path.join('models', model_detection_name)
 
         with open(destination, 'wb') as f:  # Здесь укажите нужный путь к файлу
             f.write(download_response.content)
 
-    if not os.path.isfile(os.path.join(models_path, model_mask_name)):
+    if not os.path.isfile(os.path.join('models', model_mask_name)):
         print('downloading model segmentation model')
 
         base_url = 'https://cloud-api.yandex.net/v1/disk/public/resources/download?'
-        public_key = 'https://disk.yandex.ru/d/hMja6N8LUz4R3w'  # Сюда вписываете вашу ссылку
+        public_key = 'https://disk.yandex.ru/d/8iJHpC-5WY_kRw'  # Сюда вписываете вашу ссылку
 
         # Получаем загрузочную ссылку
         final_url = base_url + urlencode(dict(public_key=public_key))
@@ -365,13 +362,13 @@ def init_models(model_detection_name='model_jew_detect_01.05.2023.md', model_mas
         # Загружаем файл и сохраняем его
         download_response = requests.get(download_url)
 
-        destination = os.path.join(models_path, model_mask_name)
+        destination = os.path.join('models', model_mask_name)
 
         with open(destination, 'wb') as f:  # Здесь укажите нужный путь к файлу
             f.write(download_response.content)
 
-    model_detection = load_model_detection(os.path.join(models_path, model_detection_name))
-    model_mask = load_model_mask(os.path.join(models_path, model_mask_name))
+    model_detection = load_model_detection(os.path.join('models', model_detection_name))
+    model_mask = load_model_mask(os.path.join('models', model_mask_name))
 
     model_detection.eval()
     model_mask.eval()
@@ -401,5 +398,5 @@ if __name__ == '__main__':
     
     Выдает результаты в виде списка словарей. Там картинки в PIL Image. Если задать path, то в path сохранит картинки-результаты
     '''
-    result = get_jewellery_image(images, model_detection, model_mask, path='', gaussian_blur=20)
+    result = get_jewellery_image(images, model_detection, model_mask, path='')
     print(result)
