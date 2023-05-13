@@ -1,22 +1,12 @@
-# import segmentation_models_pytorch
 import os
-
 import numpy as np
 import torch
 import torchvision
-
 import torchvision.transforms.functional as TF
 from torchvision import transforms
 import copy
-
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-# from torchvision.models.detection import FasterRCNN
-# from torchvision.models.detection.rpn import AnchorGenerator
-# import time
-# import math
-
 from PIL import Image
-import gdown
 
 
 def PIL_image_to_tensor(image, model_shape):
@@ -150,24 +140,29 @@ def jewellery_mask(images, model, model_shape=(384, 384), k=0):
 
     result = []
 
-    for i, prediction in enumerate(predictions):
-        pred_box = prediction['boxes'][0].tolist()
-        pred_score = prediction['scores'][0].item()
-        pred_mask = transform(prediction['masks'][0])
-
+    try:
+        for i, prediction in enumerate(predictions):
+            # pred_box = prediction['boxes'][0].tolist()
+            pred_score = prediction['scores'][0].item()
+            pred_mask = transform(prediction['masks'][0])
+            result.append((pred_mask, pred_score))
+    except:
+        pred_score = None
+        pred_mask = None
         result.append((pred_mask, pred_score))
+
     return result
 
 
-def clean_image_with_mask(image, r=0.6):
+def clean_image_with_mask(image, r=0.6, blur=0.1):
     if r == None:
         return image
 
     image = np.array(image)
 
     x = image[:, :, 3] / 255.0 + (r - 0.5)
-    x = np.clip(x, 0, 1)
-    image[:, :, 3] = x.round() * 255
+    x = np.clip(x, blur, 1)
+    image[:, :, 3] = x * 255
 
     return Image.fromarray(image)
 
@@ -207,26 +202,29 @@ def get_jewellery_image_(images_original, model_detection, model_mask,
                          threshold_segmentation=0.99,
                          threshold_clean_mask=0.9,
                          show_bad_results=True,
+                         blur=0.1,
                          ):
     predict = jewellery_detect_crop_mask(images_original, model_detection, model_mask, model_shape=model_shape, k=k)
 
     rows = len(images_original)
 
     for k in range(rows):
-        mask = predict[k]['mask']
+        if predict[k]['mask'] is not None:
 
-        q = copy.copy(predict[k]['cropped_image'])
-        q.putalpha(mask.resize(predict[k]['cropped_image'].size))
-        q_clean = clean_image_with_mask(q, r=threshold_clean_mask)
-        predict[k]['image_segmented'] = q_clean
+            mask = predict[k]['mask']
 
-        if predict[k]['detection_accurancy'] < threshold_detect and not show_bad_results:
-            predict[k]['cropped_image'] = None
+            q = copy.copy(predict[k]['cropped_image'])
+            q.putalpha(mask.resize(predict[k]['cropped_image'].size))
+            q_clean = clean_image_with_mask(q, r=threshold_clean_mask, blur=blur)
+            predict[k]['image_segmented'] = q_clean
 
-        if predict[k]['segmentation_accurancy'] < threshold_segmentation and not show_bad_results:
-            predict[k]['image_segmented'] = None
+            if predict[k]['detection_accurancy'] < threshold_detect and not show_bad_results:
+                predict[k]['cropped_image'] = None
 
-        predict[k]['image_original'] = images_original[k]
+            if predict[k]['segmentation_accurancy'] < threshold_segmentation and not show_bad_results:
+                predict[k]['image_segmented'] = None
+
+            predict[k]['image_original'] = images_original[k]
 
     return predict
 
@@ -241,7 +239,8 @@ def get_jewellery_image(images_original, model_detection, model_mask,
                         threshold_segmentation=0.99,
                         threshold_clean_mask=0.9,
                         show_bad_results=True,
-                        path=None
+                        path=None,
+                        blur=0.1,
                         ):
     if not isinstance(images_original, list):
         images_original = [images_original]
@@ -265,6 +264,7 @@ def get_jewellery_image(images_original, model_detection, model_mask,
                                    threshold_segmentation=threshold_segmentation,
                                    threshold_clean_mask=threshold_clean_mask,
                                    show_bad_results=show_bad_results,
+                                   blur=blur
                                    )
 
     if path is not None:
@@ -398,5 +398,5 @@ if __name__ == '__main__':
     
     Выдает результаты в виде списка словарей. Там картинки в PIL Image. Если задать path, то в path сохранит картинки-результаты
     '''
-    result = get_jewellery_image(images, model_detection, model_mask, path='')
+    result = get_jewellery_image(images, model_detection, model_mask, path='', blur=0.1)
     print(result)
