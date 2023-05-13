@@ -6,7 +6,7 @@ import torchvision.transforms.functional as TF
 from torchvision import transforms
 import copy
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from PIL import Image
+from PIL import Image, ImageFilter
 
 
 def PIL_image_to_tensor(image, model_shape):
@@ -154,21 +154,21 @@ def jewellery_mask(images, model, model_shape=(384, 384), k=0):
     return result
 
 
-def clean_image_with_mask(image, r=0.6, blur=0.1):
+def clean_image_with_mask(image, r=0.6, min_blur=0.1):
     if r == None:
         return image
 
     image = np.array(image)
 
     x = image[:, :, 3] / 255.0 + (r - 0.5)
-    x = np.clip(x, blur, 1)
+    x = np.clip(x, min_blur, 1)
     image[:, :, 3] = x * 255
 
     return Image.fromarray(image)
 
 
-def jewellery_detect_crop_mask(images, model_detection, model_mask, model_shape=(384, 384), k=0):
-    rboxes = jewellery_detection_get_rx_ry(images, model_detection, model_shape=model_shape, k=0.02)
+def jewellery_detect_crop_mask(images, model_detection, model_mask, model_shape=(384, 384), k=0.02):
+    rboxes = jewellery_detection_get_rx_ry(images, model_detection, model_shape=model_shape, k=k)
 
     cropped_images = []
     detect_acc = []
@@ -202,7 +202,8 @@ def get_jewellery_image_(images_original, model_detection, model_mask,
                          threshold_segmentation=0.99,
                          threshold_clean_mask=0.9,
                          show_bad_results=True,
-                         blur=0.1,
+                         min_blur=0.1,
+                         gaussian_blur=20,
                          ):
     predict = jewellery_detect_crop_mask(images_original, model_detection, model_mask, model_shape=model_shape, k=k)
 
@@ -215,7 +216,12 @@ def get_jewellery_image_(images_original, model_detection, model_mask,
 
             q = copy.copy(predict[k]['cropped_image'])
             q.putalpha(mask.resize(predict[k]['cropped_image'].size))
-            q_clean = clean_image_with_mask(q, r=threshold_clean_mask, blur=blur)
+            q_clean = clean_image_with_mask(q, r=threshold_clean_mask, min_blur=min_blur)
+
+            rgb = q_clean.convert('RGB')
+            blurred = rgb.filter(ImageFilter.GaussianBlur(gaussian_blur))
+            q_clean = Image.composite(rgb, blurred, mask.resize(predict[k]['cropped_image'].size))
+
             predict[k]['image_segmented'] = q_clean
 
             if predict[k]['detection_accurancy'] < threshold_detect and not show_bad_results:
@@ -240,7 +246,8 @@ def get_jewellery_image(images_original, model_detection, model_mask,
                         threshold_clean_mask=0.9,
                         show_bad_results=True,
                         path=None,
-                        blur=0.1,
+                        min_blur=0.1,
+                        gaussian_blur=20,
                         ):
     if not isinstance(images_original, list):
         images_original = [images_original]
@@ -264,7 +271,8 @@ def get_jewellery_image(images_original, model_detection, model_mask,
                                    threshold_segmentation=threshold_segmentation,
                                    threshold_clean_mask=threshold_clean_mask,
                                    show_bad_results=show_bad_results,
-                                   blur=blur
+                                   min_blur=min_blur,
+                                   gaussian_blur=gaussian_blur
                                    )
 
     if path is not None:
@@ -395,8 +403,8 @@ if __name__ == '__main__':
     - список ссылок на изображения
     - список PIL image
     - список бинарных файлов
-    
+
     Выдает результаты в виде списка словарей. Там картинки в PIL Image. Если задать path, то в path сохранит картинки-результаты
     '''
-    result = get_jewellery_image(images, model_detection, model_mask, path='', blur=0.1)
+    result = get_jewellery_image(images, model_detection, model_mask, path='', gaussian_blur=20)
     print(result)
