@@ -1,17 +1,18 @@
-from flask import Flask, request, send_file, after_this_request
+from flask import Flask, request, send_file
 import logging
 from PIL import Image
 import io
 from service import init_models, get_jewellery_image
+import requests
 
 
 # Инициализация приложения и моделей
 app = Flask(__name__)
-model_detection, model_mask = init_models()
+model_detection, model_mask = init_models(use_gpu=True)
 
 
-@app.route('/process/mode=<string:mode>', methods=['POST'])
-def process(mode):
+@app.route('/process', methods=['POST'])
+def process():
     '''
     Метод для обработки Byte-файлов.
     mode принимает 2 значения: "crop" и "blur"
@@ -19,12 +20,15 @@ def process(mode):
     Возвращает файл в формате Byte-массива.
 
     Пример обращения:
-    requests.post(f'<server_url>/process/mode=<mode>',
-                  data = <io.BytesIO file>
+    requests.post(f'<server_url>/process/',
+                  json = {'url': <LINK_TO_IMG>, 'mode': <MODE>}
                 )
     '''
-    req_data = request.get_data()
-    img = Image.open(io.BytesIO(req_data))
+    req_json = request.json
+    req_url = req_json.get('url')
+    mode = req_json.get('mode')
+    req_img = requests.get(req_url).content
+    img = Image.open(io.BytesIO(req_img))
 
     buffer = io.BytesIO()
 
@@ -38,7 +42,6 @@ def process(mode):
     elif mode == 'blur':
         res[0]['image_segmented'].save(buffer, 'PNG')
     buffer.seek(0)
-    # file_path = file_path.getvalue()
 
     return send_file(buffer, mimetype='image/png')
 

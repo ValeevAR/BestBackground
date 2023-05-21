@@ -17,30 +17,11 @@ class Client:
 
         Возвращает объект типа PIL.Image
         '''
-        response_img = requests.get(img_url)
 
         response_model = requests.post(
-            f'{self.server_url}/process/mode={mode}',
-            data=io.BytesIO(response_img.content)
-        )
-
-        return Image.open(io.BytesIO(response_model.content))
-
-    def process_img(self, img_path, mode):
-        '''
-        Метод обработки изображений по локальному пути.
-        mode принимает значения 'blur' или 'crop'.
-
-        Возвращает объект типа PIL.Image
-        '''
-        img = Image.open(img_path)
-        buffer = io.BytesIO()
-        img.save(buffer, format='JPEG')
-        byte_im = buffer.getvalue()
-
-        response_model = requests.post(
-            f'{self.server_url}/process/mode={mode}',
-            data=byte_im
+            f'{self.server_url}/process',
+            json = {'url':img_url,
+                    'mode':mode}
         )
 
         return Image.open(io.BytesIO(response_model.content))
