@@ -321,9 +321,14 @@ def save_response_content(response, destination):
                 f.write(chunk)
 
 
-def init_models(model_detection_name='model_jew_detect_01.05.2023.md', model_mask_name='model_jew_mask_02.05.2023.md'):
+def init_models(model_detection_name='model_jew_detect_01.05.2023.md', model_mask_name='model_jew_mask_02.05.2023.md', use_gpu=True):
     global DEVICE
-    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    if use_gpu:
+        DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+        if DEVICE == "cpu":
+            raise UserWarning('Could not enable CUDA, using CPU instead.')
+    else:
+        DEVICE =  "cpu"
     models_folder = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'models')
 
     if not os.path.exists(models_folder):
