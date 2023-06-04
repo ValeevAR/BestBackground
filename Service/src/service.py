@@ -11,7 +11,25 @@ from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from PIL import Image, ImageFilter
 from urllib.parse import urlencode
 
-def PIL_image_to_tensor(image, model_shape):
+MODEL_DETECTION_NAME = 'model_jew_detect_01.05.2023.md'
+MODEL_MASK_NAME = 'model_jew_mask_02.05.2023.md'
+
+BASE_URL_YANDEX_CLOUD = 'https://cloud-api.yandex.net/v1/disk/public/resources/download?'
+URL_DETECTION_MODEL = 'https://disk.yandex.ru/d/ZIFMEHuc2xoAOw'
+URL_SEGMENTATION_MODEL = 'https://disk.yandex.ru/d/hMja6N8LUz4R3w'
+
+STEPS_FOR_THRESHOLD = [0.8, 0.7, 0.6, 0.5]
+GAUSSIAN_BLUR_VALUE = 20
+
+
+def PIL_image_to_tensor(image: Image, model_shape):
+    '''
+    Преобразует изображение PIL Image в нормализованное и изменяет размеры на model_shape
+
+    :param image: изображение PIL Image
+    :param model_shape: новые размеры изображения
+    :return: PIL Image нормализованное размера model_shape
+    '''
     test_transform = torch.nn.Sequential(
         transforms.Resize(model_shape),
         transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
@@ -23,11 +41,24 @@ def PIL_image_to_tensor(image, model_shape):
 
 
 def PIL_images_to_tensors(images, model_shape):
+    '''
+    Преобразует image формата PIL_image в нормализованный тензор размера model_shape
+
+    :param images: изображение PIL_image
+    :param model_shape: новые размеры изображения
+    :return: тензор размером model_shape
+    '''
     images = [i.convert('RGB') for i in images]
     return [PIL_image_to_tensor(i, model_shape=model_shape) for i in images]
 
 
 def load_model_detection(name):
+    '''
+    Загрузка модели детектции
+
+    :param name: путь к файлу модели детектции
+    :return: модель
+    '''
     model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)
 
     num_classes = 2  # 1 class (wheat) + background
@@ -46,6 +77,12 @@ def load_model_detection(name):
 
 
 def load_model_mask(name):
+    '''
+    Загрузка модели сегментации
+
+    :param name: путь к файлу модели сегментации
+    :return: модель
+    '''
     model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True)
 
     in_features = model.roi_heads.box_predictor.cls_score.in_features
@@ -66,10 +103,12 @@ def load_model_mask(name):
 def jewellery_detection_get_rx_ry(images, model, model_shape=(384, 384), k=0):
     '''
     Делает детекцию объектов. Выдает относительные координаты
+
     :param images: список PIL Image изображения - желательно делать маленькими батчами
     :param model: model for detection
     :param model_shape: shape of images in model
-    :return" relative coordinates (i.e. coordinate devide dimenstion of image) of detection box in a format (x1, y1, x2, y1)
+    :return" relative coordinates (i.e. coordinate devide dimenstion of image)
+            of detection box in a format (x1, y1, x2, y1)
     '''
     model.eval()
 
@@ -81,7 +120,6 @@ def jewellery_detection_get_rx_ry(images, model, model_shape=(384, 384), k=0):
     result = []
 
     for i, prediction in enumerate(predictions):
-
         pred_boxs = prediction['boxes']
         pred_boxs_numpy = pred_boxs.detach().cpu().numpy()
 
@@ -90,14 +128,16 @@ def jewellery_detection_get_rx_ry(images, model, model_shape=(384, 384), k=0):
 
         pred_scores_numpy = pred_scores.detach().cpu().numpy()
 
-        for threshold in [0.8, 0.7, 0.6, 0.5]:
-            list_ind = np.where(pred_scores_numpy > 0.8)[0]
+        # вывод изображения с наилучшими несколькими detection box
+        for threshold in STEPS_FOR_THRESHOLD:
+            list_ind = np.where(pred_scores_numpy > max(STEPS_FOR_THRESHOLD))[0]
             ind_max = len(list_ind)
             if ind_max > 0:
                 break
         if ind_max == 0:
             ind_max = 1
 
+        # объединение нескольких detection box в один
         pred_boxs_good = pred_boxs_numpy[:ind_max]
 
         best_x1 = min([p[0] for p in pred_boxs_good])
@@ -122,6 +162,13 @@ def jewellery_detection_get_rx_ry(images, model, model_shape=(384, 384), k=0):
 
 
 def crop_image(image, rbox):
+    '''
+    Обрезка изображения
+
+    :param image: изображение
+    :param rbox: список относительных координат
+    :return: обрезанное изображение
+    '''
     image_shape = image.size
     x1 = image_shape[0] * rbox[0]
     y1 = image_shape[1] * rbox[1]
@@ -130,7 +177,15 @@ def crop_image(image, rbox):
     return image.crop((x1, y1, x2, y2))
 
 
-def jewellery_mask(images, model, model_shape=(384, 384), k=0):
+def jewellery_mask(images, model, model_shape=(384, 384)):
+    '''
+    Инференс модели по обределению маски
+
+    :param images: исходные изображения формата PIL Image
+    :param model: модель
+    :param model_shape: размер изобржанения на входе в модель
+    :return: маска
+    '''
     transform = transforms.ToPILImage()
 
     model.eval()
@@ -144,7 +199,6 @@ def jewellery_mask(images, model, model_shape=(384, 384), k=0):
 
     try:
         for i, prediction in enumerate(predictions):
-            # pred_box = prediction['boxes'][0].tolist()
             pred_score = prediction['scores'][0].item()
             pred_mask = transform(prediction['masks'][0])
             result.append((pred_mask, pred_score))
@@ -157,6 +211,16 @@ def jewellery_mask(images, model, model_shape=(384, 384), k=0):
 
 
 def clean_image_with_mask(image, r=0.6, min_blur=0.1):
+    '''
+    Обработка маски. Сначала к 1 приравнивается все значения больше r, остальные к 0.
+    Оставшиеся к нулю приравниваются.
+    После этого происходит размытие маски
+
+    :param image: исходное изображение формата PIL Image
+    :param r: порог для округения
+    :param min_blur: параметр размытия
+    :return: PIL Image
+    '''
     if r == None:
         return image
 
@@ -170,6 +234,16 @@ def clean_image_with_mask(image, r=0.6, min_blur=0.1):
 
 
 def jewellery_detect_crop_mask(images, model_detection, model_mask, model_shape=(384, 384), k=0.02):
+    '''
+    Совместная работа двух моделей. Формирование словаря резултатов на выходе
+
+    :param images: исходные изображения формата PIL Image
+    :param model_detection: модель детектции
+    :param model_mask: модель сегментации
+    :param model_shape: размер изобржанения на входе в модели
+    :param k: расширение рамки для детектции на 100*k процентов
+    :return: словарь с результатами работы модели
+    '''
     rboxes = jewellery_detection_get_rx_ry(images, model_detection, model_shape=model_shape, k=k)
 
     cropped_images = []
@@ -207,6 +281,22 @@ def get_jewellery_image_(images_original, model_detection, model_mask,
                          min_blur=0.1,
                          gaussian_blur=20,
                          ):
+    '''
+    Инференс моделе с настройками
+
+    :param images_original: исходные изображения в формате PIL Image
+    :param model_detection: модель детектции
+    :param model_mask: модель сегментации
+    :param model_shape: размер изобржанения на входе в модели
+    :param k: расширение рамки для детектции на 100*k процентов
+    :param threshold_detect: порог уверенности модели детектции
+    :param threshold_segmentation: порог уверенности модели сегментации
+    :param threshold_clean_mask: порог для сегментации, свыше которого маска равна 1
+    :param show_bad_results: показывать ли плохие результаты
+    :param min_blur: параметры размытия
+    :param gaussian_blur: параметры размытия
+    :return: словарь с результатами работы модели
+    '''
     predict = jewellery_detect_crop_mask(images_original, model_detection, model_mask, model_shape=model_shape, k=k)
 
     rows = len(images_original)
@@ -248,6 +338,23 @@ def get_jewellery_image(images_original, model_detection, model_mask,
                         min_blur=0.1,
                         gaussian_blur=20,
                         ):
+    '''
+
+    :param images_original: исходные изображения в формате PIL Image
+    :param model_detection: модель детектции
+    :param model_mask: модель сегментации
+    :param model_shape: размер изобржанения на входе в модели
+    :param k: расширение рамки для детектции на 100*k процентов
+    :param threshold_detect: порог уверенности модели детектции
+    :param threshold_segmentation: порог уверенности модели сегментации
+    :param threshold_clean_mask: порог для сегментации, свыше которого маска равна 1
+    :param show_bad_results: показывать ли плохие результаты
+    :param min_blur: параметры размытия
+    :param path: путь для сохранения результатов. Если None, то нет сохранений
+    :param min_blur: параметры размытия
+    :param gaussian_blur: параметры размытия
+    :return: словарь с результатами работы модели
+    '''
     if not isinstance(images_original, list):
         images_original = [images_original]
 
@@ -289,46 +396,25 @@ def get_jewellery_image(images_original, model_detection, model_mask,
     return predict
 
 
-def download_file_from_google_drive(id, destination):
-    URL = "https://docs.google.com/uc?export=download"
+def init_models(model_detection_name=MODEL_DETECTION_NAME,
+                model_mask_name=MODEL_MASK_NAME,
+                use_gpu=True):
+    '''
+    Подгружаем модели с яндекс облака, если они еще не загружены
+    После этого модели подгружаются в память
 
-    session = requests.Session()
-
-    response = session.get(URL, params={'id': id}, stream=True)
-    token = get_confirm_token(response)
-
-    if token:
-        params = {'id': id, 'confirm': token}
-        response = session.get(URL, params=params, stream=True)
-
-    save_response_content(response, destination)
-
-
-def get_confirm_token(response):
-    for key, value in response.cookies.items():
-        if key.startswith('download_warning'):
-            return value
-
-    return None
-
-
-def save_response_content(response, destination):
-    CHUNK_SIZE = 32768
-
-    with open(destination, "wb") as f:
-        for chunk in response.iter_content(CHUNK_SIZE):
-            if chunk:  # filter out keep-alive new chunks
-                f.write(chunk)
-
-
-def init_models(model_detection_name='model_jew_detect_01.05.2023.md', model_mask_name='model_jew_mask_02.05.2023.md', use_gpu=True):
+    :param model_detection: модель детектции
+    :param model_mask: модель сегментации
+    :param use_gpu: использовать ли GPU, иначе используется CPU
+    :return: модель детектции, модель сегментации
+    '''
     global DEVICE
     if use_gpu:
         DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
         if DEVICE == "cpu":
             raise UserWarning('Could not enable CUDA, using CPU instead.')
     else:
-        DEVICE =  "cpu"
+        DEVICE = "cpu"
     models_folder = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'models')
 
     if not os.path.exists(models_folder):
@@ -338,8 +424,8 @@ def init_models(model_detection_name='model_jew_detect_01.05.2023.md', model_mas
     if not os.path.isfile(os.path.join(models_folder, model_detection_name)):
         print('downloading model detection model')
 
-        base_url = 'https://cloud-api.yandex.net/v1/disk/public/resources/download?'
-        public_key = 'https://disk.yandex.ru/d/ZIFMEHuc2xoAOw'  # Сюда вписываете вашу ссылку
+        base_url = BASE_URL_YANDEX_CLOUD
+        public_key = URL_DETECTION_MODEL
 
         # Получаем загрузочную ссылку
         final_url = base_url + urlencode(dict(public_key=public_key))
@@ -357,8 +443,8 @@ def init_models(model_detection_name='model_jew_detect_01.05.2023.md', model_mas
     if not os.path.isfile(os.path.join(models_folder, model_mask_name)):
         print('downloading model segmentation model')
 
-        base_url = 'https://cloud-api.yandex.net/v1/disk/public/resources/download?'
-        public_key = 'https://disk.yandex.ru/d/hMja6N8LUz4R3w'  # Сюда вписываете вашу ссылку
+        base_url = BASE_URL_YANDEX_CLOUD
+        public_key = URL_SEGMENTATION_MODEL
 
         # Получаем загрузочную ссылку
         final_url = base_url + urlencode(dict(public_key=public_key))
@@ -370,7 +456,7 @@ def init_models(model_detection_name='model_jew_detect_01.05.2023.md', model_mas
 
         destination = os.path.join(models_folder, model_mask_name)
 
-        with open(destination, 'wb') as f:  # Здесь укажите нужный путь к файлу
+        with open(destination, 'wb') as f:
             f.write(download_response.content)
 
     model_detection = load_model_detection(os.path.join(models_folder, model_detection_name))
@@ -405,5 +491,5 @@ if __name__ == '__main__':
 
     Выдает результаты в виде списка словарей. Там картинки в PIL Image. Если задать path, то в path сохранит картинки-результаты
     '''
-    result = get_jewellery_image(images, model_detection, model_mask, path='', gaussian_blur=20)
+    result = get_jewellery_image(images, model_detection, model_mask, path='', gaussian_blur=GAUSSIAN_BLUR_VALUE)
     print(result)
