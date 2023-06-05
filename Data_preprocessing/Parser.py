@@ -1,8 +1,9 @@
+import random
+from io import BytesIO
+
 import requests
 from bs4 import BeautifulSoup
-import random
 from PIL import Image
-from io import BytesIO
 
 BASIC_PATH = './raw_data6/'
 

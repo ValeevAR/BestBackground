@@ -1,4 +1,4 @@
-from python:3.9.7
+FROM python:3.9.7
 
 WORKDIR /bestbg_app
 

@@ -1,15 +1,16 @@
-import os
+import copy
 import io
+import os
+from urllib.parse import urlencode
+
 import numpy as np
 import requests
 import torch
 import torchvision
 import torchvision.transforms.functional as TF
-from torchvision import transforms
-import copy
-from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from PIL import Image, ImageFilter
-from urllib.parse import urlencode
+from torchvision import transforms
+from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 
 MODEL_DETECTION_NAME = 'model_jew_detect_01.05.2023.md'
 MODEL_MASK_NAME = 'model_jew_mask_02.05.2023.md'
@@ -412,7 +413,7 @@ def init_models(model_detection_name=MODEL_DETECTION_NAME,
     if use_gpu:
         DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
         if DEVICE == "cpu":
-            raise UserWarning('Could not enable CUDA, using CPU instead.')
+            print('Could not enable CUDA, using CPU instead.')
     else:
         DEVICE = "cpu"
     models_folder = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'models')
