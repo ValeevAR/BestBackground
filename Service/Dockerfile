@@ -1,4 +1,4 @@
-FROM python:3.9.7
+FROM pytorch/pytorch:1.13.1-cuda11.6-cudnn8-runtime
 
 WORKDIR /bestbg_app
 
