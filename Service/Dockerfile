@@ -4,7 +4,9 @@ WORKDIR /bestbg_app
 
 COPY . ./bestbg_app
 
-RUN pip install -r ./bestbg_app/requirements.txt
+RUN apt-get -y update &&\
+    apt-get install curl &&\
+    pip install -r ./bestbg_app/requirements.txt
 
 EXPOSE 8080
 
