@@ -1,4 +1,5 @@
 import io
+import os
 from base64 import decodebytes
 
 import requests
@@ -6,6 +7,10 @@ from PIL import Image
 
 GOOD_STATUS = [2]
 ERROR_STATUS = [4, 5]
+
+with open(os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                       'example_urls.txt'), 'r') as file:
+    EXAMPLE_URLS = file.read().split('\n')
 
 
 def decode_img(decoded_img):
