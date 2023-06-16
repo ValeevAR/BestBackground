@@ -1,13 +1,17 @@
+import os
 import random
 
 from locust import HttpUser, task
-from src.client import EXAMPLE_URLS
 
 
 MODES = ['blur', 'crop', 'both']
 GET_IMAGE_RATIO = 100
 GOOD_STATUS = [2]
 ERROR_STATUS = [4, 5]
+
+with open(os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                       'src', 'example_urls.txt'), 'r') as file:
+    EXAMPLE_URLS = file.read().split('\n')
 
 
 class PicturePostUser(HttpUser):
